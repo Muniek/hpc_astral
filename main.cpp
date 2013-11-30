@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cmath>
 #include <vector>
+#include <iomanip>
 
 using namespace std;
 
@@ -28,27 +29,73 @@ void serial(vector< vector<double> > &res_a, int size, int computations) {
 
 void parallel(int size) {
   int nodes = MPI::COMM_WORLD.Get_size();
-  int rows = ceil((double)size/nodes);
+  int rows_oryg = ceil((double)size/nodes);
+  int rows_halo;
   int rank = MPI::COMM_WORLD.Get_rank();
   vector< vector<double> > res_a;
 
   //first node
   if (rank == 0) {
-    rows += 1;
-    res_a.resize(rows, vector<double>(size));
+    rows_halo = 1;
+    res_a.resize(rows_oryg + rows_halo, vector<double>(size));
   //last node
   } else if(rank == nodes-1) {
-    rows = size - (ceil((double)nodes/rows));
-    res_a.resize((rows + 1), vector<double>(size));
+    rows_oryg = size - rows_oryg * (nodes-1);//(ceil((double)nodes/rows_oryg));
+    rows_halo = 1;
+    res_a.resize((rows_oryg + rows_halo), vector<double>(size));
   } else {//central nodes
-    rows += 2;
-    res_a.resize(rows, vector<double>(size));
+    rows_halo = 2;
+    res_a.resize(rows_oryg + rows_halo, vector<double>(size));
   }
+  
+  int rows_eff = rows_oryg + rows_halo;
 
   //zeroing the array
-  for(int i = 0; i < rows; i++) {
+  for(int i = 0; i < rows_eff; i++) {
     for(int j =0; j < size; j++)  {
       res_a[i][j] = 0.0;
+    }
+  }
+
+  double h = 1.0/(size - 1);
+
+  //filling the x = 0 column with primary data
+  for(int i = 0; i < rows_eff; i++)
+    if (rank == 0)
+      res_a[i][0] = pow(sin(M_PI * i * h), 2); 
+    else
+      res_a[i][0] = pow(sin(M_PI * h * (i + rank * rows_oryg - 1)), 2);
+ 
+
+  cout << setprecision(3);
+  const int m = 1;
+  if (rank == 0) {
+    //printing the array
+     
+    for(int i = 0; i < rows_eff; i++) {
+      for(int j = 0; j < size; j++)
+        cout << res_a[i][j] << " ";
+      cout << endl;
+    }
+    //sending message
+    MPI::COMM_WORLD.Send(&m, 1, MPI_INT, (rank+1), 0);  
+} else {
+    int recv = 0;
+    MPI::Status status;
+    MPI::COMM_WORLD.Recv(&recv, 1, MPI_INT, rank-1, MPI::ANY_TAG, status); 
+
+    while (!recv) { }
+
+    if (recv) {
+      //printing the array
+      for(int i = 0; i < rows_eff; i++) {
+        for(int j = 0; j < size; j++)
+          cout << res_a[i][j] << " ";
+        cout << endl;
+      }
+      if (rank != (nodes -1)) { 
+        MPI::COMM_WORLD.Send(&m, 1, MPI_INT, (rank+1), 0);  
+      }
     }
   }
 }
@@ -88,26 +135,10 @@ double average_error(vector< vector<double> > &analytical_a, vector< vector<doub
   return global_error(analytical_a, iterative_a, size) / size;
 }
 
-main()  {
-  int n = 50;
-  int computations = 50;
-  vector< vector<double> > res_serial(n, vector<double>(n));
-  serial(res_serial, n, computations);
-  for(int i = 0; i < n; i++) {
-    for(int j = 0; j < n; j++)
-      cout << res_serial[i][j] << " ";
-    cout << endl;
-  }
-  cout << endl;
-  vector< vector<double> > res_analytical(n, vector<double>(n));
-  analytical(res_analytical, n, 100);
-  for(int i = 0; i < n; i++) {
-    for(int j = 0; j < n; j++)
-      cout << res_analytical[i][j] << " ";
-    cout << endl;
-  } 
-  cout << endl;
-  cout << "Global error: " << global_error(res_analytical, res_serial, n) << endl;
-  cout << "Average error: " << average_error(res_analytical, res_serial, n) << endl;
+main(int argc, char *argv[])  {
+  MPI::Init(argc, argv);
+  int n = 9;
+  parallel(n);
+  MPI::Finalize();
   return 0;
 }
