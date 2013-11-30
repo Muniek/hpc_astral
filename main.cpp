@@ -27,7 +27,7 @@ void serial(vector< vector<double> > &res_a, int size, int computations) {
         res_a[i][j] = 0.25 * (res_a[i - 1][j] + res_a[i + 1][j] + res_a[i][j - 1] + res_a[i][j + 1]); 
 }
 
-void parallel(int size) {
+void parallel(int size, int computations) {
   int nodes = MPI::COMM_WORLD.Get_size();
   int rows_oryg = ceil((double)size/nodes);
   int rows_halo;
@@ -40,7 +40,7 @@ void parallel(int size) {
     res_a.resize(rows_oryg + rows_halo, vector<double>(size));
   //last node
   } else if(rank == nodes-1) {
-    rows_oryg = size - rows_oryg * (nodes-1);//(ceil((double)nodes/rows_oryg));
+    rows_oryg = size - rows_oryg * (nodes-1);
     rows_halo = 1;
     res_a.resize((rows_oryg + rows_halo), vector<double>(size));
   } else {//central nodes
@@ -65,7 +65,13 @@ void parallel(int size) {
       res_a[i][0] = pow(sin(M_PI * i * h), 2); 
     else
       res_a[i][0] = pow(sin(M_PI * h * (i + rank * rows_oryg - 1)), 2);
- 
+
+  //gauss-seidel iterations
+  for(int ci = 0; ci < computations; ci++)
+    for(int i = 1; i < rows_oryg; i++)
+      for(int j = 1; j < size - 1; j++)
+        res_a[i][j] = 0.25 * (res_a[i - 1][j] + res_a[i + 1][j] + res_a[i][j - 1] + res_a[i][j + 1]); 
+
 
   cout << setprecision(3);
   const int m = 1;
@@ -138,7 +144,8 @@ double average_error(vector< vector<double> > &analytical_a, vector< vector<doub
 main(int argc, char *argv[])  {
   MPI::Init(argc, argv);
   int n = 9;
-  parallel(n);
+  int computations = 100;
+  parallel(n, computations);
   MPI::Finalize();
   return 0;
 }
