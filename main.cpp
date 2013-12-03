@@ -1,4 +1,5 @@
 #include "mpi.h"
+#include <stdlib.h>
 #include <iostream>
 #include <cmath>
 #include <vector>
@@ -6,7 +7,7 @@
 
 using namespace std;
 
-void print_array(vector< vector<double> > &res_a, int rows, int columns) {
+void print_array(double** &res_a, int rows, int columns) {
   for(int i = 0; i < rows; i++) {
     for(int j = 0; j < columns; j++)
       cout << res_a[i][j] << " ";
@@ -22,7 +23,7 @@ void to_zero(vector< vector<double> > &res_a, int rows, int columns) {
     }
 }
 
-void gauss_seidel(vector< vector<double> > &res_a, int rows, int columns) {
+void gauss_seidel(double** &res_a, int rows, int columns) {
   for(int i = 1; i < rows - 1; i++)
     for(int j = 1; j < columns - 1; j++)
       res_a[i][j] = 0.25 * (res_a[i - 1][j] + res_a[i + 1][j] + res_a[i][j - 1] + res_a[i][j + 1]); 
@@ -35,7 +36,11 @@ void parallel(int size, int computations) {
   int rank = MPI::COMM_WORLD.Get_rank();
   //the value of step
   double h = 1.0/(size - 1);
-  //setting the boolean helper - true for last node 
+  //setting the boolean helpers
+  //for fist node
+  bool isFirst = false;
+  if (rank == 0) isFirst = true;
+  //for last node
   bool isLast = false;
   if (rank == nodes - 1) isLast = true;
   //the proper amount of rows for computing for current node
@@ -44,14 +49,18 @@ void parallel(int size, int computations) {
   //this amount if different for last row - it's just what's left
   if (isLast)
     comp_rows = (size - 2) - comp_rows * (nodes - 1); 
-  
   //setting up the array
   //to comp_rows there are 2 extra (halo) ones,
   //where for first and last node, they're just an edges instead of being halo ones
-  //the std::vector is default initialied with 0s
   int all_rows = comp_rows + 2;
-  vector< vector<double> > res_a(all_rows, vector<double>(size));
-
+ 
+  double **res_a = (double**)malloc(all_rows * sizeof(double*));
+  for(int i = 0; i < all_rows; i++)
+    res_a[i] = (double*)malloc(size * sizeof(double));
+  //zeroing the newly created array
+  for(int i = 0; i < all_rows; i++)
+    for(int j = 0; j < size; j++)
+      res_a[i][j] = 0.0;
   //filling the x = 0 column with proper data - sin^2(PI * y) 
   for(int i = 0; i < all_rows; i++)
     res_a[i][0] = pow(sin(M_PI * h * (i + (rank * (ceil((double)(size - 2) / nodes))))), 2);  
