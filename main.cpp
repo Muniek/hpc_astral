@@ -43,6 +43,8 @@ void parallel(int size, int computations) {
   //for last node
   bool isLast = false;
   if (rank == nodes - 1) isLast = true;
+  //for middle one
+  bool isMiddle = !(isFirst || isLast);
   //the proper amount of rows for computing for current node
   //the -2 is because in whole computed array the first and last rows equals 0s (that's the condition)
   int comp_rows = ceil((double)(size - 2) / nodes); 
@@ -64,9 +66,25 @@ void parallel(int size, int computations) {
   //filling the x = 0 column with proper data - sin^2(PI * y) 
   for(int i = 0; i < all_rows; i++)
     res_a[i][0] = pow(sin(M_PI * h * (i + (rank * (ceil((double)(size - 2) / nodes))))), 2);  
- 
-  for(int ci = 0; ci < computations; ci++)
+  //the given condition - in last row it should be only 0s, despite the calculated, very small value (the error)
+  if (isLast)
+    res_a[all_rows - 1][0] = 0.0;
+  //computing gauss-seidel operations 
+  for(int ci = 0; ci < computations; ci++) {
     gauss_seidel(res_a, all_rows, size);
+    //transfering the data between the nodes 
+    if (!isLast) {
+      MPI::COMM_WORLD.Isend(res_a[all_rows - 2], size, MPI_DOUBLE, (rank + 1), ci);
+      MPI::COMM_WORLD.Irecv(res_a[all_rows - 1], size, MPI_DOUBLE, (rank + 1), ci);  
+    }
+     
+    if (!isFirst) {
+      MPI::COMM_WORLD.Isend(res_a[1], size, MPI_DOUBLE, (rank - 1), ci); 
+      MPI::COMM_WORLD.Irecv(res_a[0], size, MPI_DOUBLE, (rank - 1), ci);  
+    }
+  }
+  //waiting for every node to finish
+  MPI::COMM_WORLD.Barrier();
 
   //print the array (test)
   cout << setprecision(3);
@@ -129,9 +147,12 @@ double average_error(vector< vector<double> > &analytical_a, vector< vector<doub
 
 main(int argc, char *argv[])  {
   MPI::Init(argc, argv);
-  int n = 12;
-  int computations = 100;
+  //the size of the matrix
+  int n = atoi(argv[1]);
+  //the number of iterations
+  int computations = atoi(argv[2]);
   parallel(n, computations);
+
   MPI::Finalize();
   return 0;
 }
