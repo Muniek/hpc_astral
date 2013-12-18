@@ -73,14 +73,16 @@ void parallel(int size, int computations) {
   for(int ci = 0; ci < computations; ci++) {
     gauss_seidel(res_a, all_rows, size);
     //transfering the data between the nodes 
-    if (!isLast) {
-      MPI::COMM_WORLD.Isend(res_a[all_rows - 2], size, MPI_DOUBLE, (rank + 1), ci);
-      MPI::COMM_WORLD.Irecv(res_a[all_rows - 1], size, MPI_DOUBLE, (rank + 1), ci);  
-    }
-     
-    if (!isFirst) {
-      MPI::COMM_WORLD.Isend(res_a[1], size, MPI_DOUBLE, (rank - 1), ci); 
-      MPI::COMM_WORLD.Irecv(res_a[0], size, MPI_DOUBLE, (rank - 1), ci);  
+    for (int i = 0; i < nodes - 1; i++) {
+      if (rank == i) {
+        MPI::COMM_WORLD.Send(res_a[all_rows - 2], size, MPI_DOUBLE, (rank + 1), ci);
+        MPI::COMM_WORLD.Recv(res_a[all_rows - 1], size, MPI_DOUBLE, (rank + 1), ci);  
+      }
+      
+      if (rank == i + 1) {
+        MPI::COMM_WORLD.Recv(res_a[0], size, MPI_DOUBLE, (rank - 1), ci);  
+        MPI::COMM_WORLD.Send(res_a[1], size, MPI_DOUBLE, (rank - 1), ci); 
+      }
     }
   }
   //waiting for every node to finish
