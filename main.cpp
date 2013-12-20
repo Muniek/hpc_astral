@@ -48,6 +48,7 @@ void parallel(int size, int computations) {
   //the proper amount of rows for computing for current node
   //the -2 is because in whole computed array the first and last rows equals 0s (that's the condition)
   int comp_rows = ceil((double)(size - 2) / nodes); 
+  int oryg_comp_rows = ceil((double)(size - 2) / nodes); 
   //this amount if different for last row - it's just what's left
   if (isLast)
     comp_rows = (size - 2) - comp_rows * (nodes - 1); 
@@ -92,8 +93,18 @@ void parallel(int size, int computations) {
   cout << setprecision(3);
   const int m = 1;
   if (rank == 0) {
-    print_array(res_a, all_rows, size);
-    cout << endl;
+    for(int i = 0; i < all_rows - 1; i++) {
+      for(int j = 0; j < size; j++) {
+        //x
+        cout << i * h << " ";
+        //y
+        cout << j * h << " ";
+        //z
+        cout << res_a[i][j];
+        cout << endl;
+      }
+    }
+    //print_array(res_a, all_rows, size);
     MPI::COMM_WORLD.Send(&m, 1, MPI_INT, (rank+1), 0);  
   } else {
     int recv = 0;
@@ -103,13 +114,25 @@ void parallel(int size, int computations) {
     while (!recv) { }
 
     if (recv) {
-      print_array(res_a, all_rows, size);
+      for(int i = 1; i < all_rows - 1; i++) {
+        for(int j = 0; j < size; j++) {
+          //x
+          cout << i * h + h * rank * oryg_comp_rows << " ";
+          //y
+          cout << j * h << " ";
+          //z
+          cout << res_a[i][j];
+          cout << endl;
+        }
+      } 
+      //print_array(res_a, all_rows, size);
       if (rank != (nodes -1)) { 
         MPI::COMM_WORLD.Send(&m, 1, MPI_INT, (rank+1), 0);  
       }
-      cout << endl;
     }
   }
+  if (isLast)
+    cout << "1 1 0" << endl;
 }
 
 //fills given array with data get from analytical algorithm
@@ -154,7 +177,6 @@ main(int argc, char *argv[])  {
   //the number of iterations
   int computations = atoi(argv[2]);
   parallel(n, computations);
-
   MPI::Finalize();
   return 0;
 }
